@@ -1,0 +1,78 @@
+# Script não é para automação de processos e sim facilitar execução de tarefa que for muito repetitiva em ambiente azure com muitas bases
+# Após conexão com subscription do cliente o mesmo faz um Forearch em cada base sql e executa o comando solicitado, desde t-sql a scripts.sql
+
+#pre-requisitos
+# Install-Module -Name SqlServer
+# Install-Module -Name Az
+
+
+# Conectar antes na conta azure
+#Connect-AzAccount
+
+
+
+# Inicio do Script
+Import-Module SQLServer
+
+$IgnoreDB = @('master')
+
+$Subscription = Get-AzSubscription | Out-GridView -OutputMode 'Single'
+if($Subscription){
+    $Subscription | Select-AzSubscription
+
+    $AzSqlServer = Get-AzSqlServer | Out-GridView -OutputMode Multiple
+    if($AzSqlServer)
+    {
+        Foreach ($server in $AzSqlServer)
+        {
+            $SQLDatabase = Get-AzSqlDatabase -ServerName $server.ServerName -ResourceGroupName $server.ResourceGroupName | Where-Object { $_.DatabaseName -notin $IgnoreDB }
+            Foreach ($database in $SQLDatabase)
+            {
+               
+
+            # Import the module
+            #Import-Module Az.Sql -Force
+ 
+         
+            $Params = @{
+               'ServerInstance' = $server.FullyQualifiedDomainName;
+               'Database' = $database.DatabaseName;
+               'Username' = ''; #usuario com acesso as bases
+               'Password' = ''; #Senha do usuario
+             
+			 
+			 #Query, procedure etc que será executado
+               'Query' = '
+							EXECUTE dbo.IndexOptimize
+							@Databases = ''USER_DATABASES'',
+							@FragmentationLow = NULL,
+							@FragmentationMedium = NULL,
+							@FragmentationHigh = NULL,
+							@UpdateStatistics = ''ALL''
+							'
+	              }
+
+ 
+            # Splat
+            Invoke-Sqlcmd @Params
+           
+            
+            ##Trecho abaixo Executa script .sql direto nas bases, bastar passar o arquivo .sql, comentar o $params acima e descomentar abaixo removendo os <# e #>
+			
+            
+               <#
+            $Params = @{
+               'ServerInstance' = $server.FullyQualifiedDomainName;
+               'Database' = $database.DatabaseName;
+               'Username' = '';
+               'Password' = '';
+              }
+
+            
+            Invoke-Sqlcmd @Params -InputFile "C:\Temp\IndexOptimize.sql"
+             #>
+
+            }
+        }
+    }
+}
